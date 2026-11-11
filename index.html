@@ -344,10 +344,16 @@
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
   var baseLayers = {
-    topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-      maxZoom: 17, subdomains: 'abc',
-      attribution: 'Kartendaten: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende, SRTM | Darstellung: © <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'
-    }),
+    // Topografisch ohne Beschriftungen: Esri-Geländekarte + Schummerung (beide ohne Ortsnamen)
+    topo: L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 17, maxNativeZoom: 13,
+        attribution: 'Tiles © Esri — Source: USGS, Esri, TANA, DeLorme, NGA'
+      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 17, maxNativeZoom: 16, opacity: 0.55
+      })
+    ]),
     style: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
       maxZoom: 17, subdomains: 'abcd',
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende © <a href="https://carto.com/attributions">CARTO</a>'
@@ -756,7 +762,7 @@
       '<label class="field">Gebiet<select id="selBez">' + bezOptions() + '</select></label>' +
       '<label class="check"><input type="checkbox" id="chkNames" checked> Namen nach der Antwort auf der Karte anzeigen</label>' +
       '<button class="btn big" id="goBtn" type="button">Spiel starten</button>' +
-      '<p class="note" style="margin-top:12px">Tipp: Oben rechts kannst du zwischen topografischer und stilisierter Hintergrundkarte wechseln. Die topografische Karte enthält eigene Ortsbeschriftungen.</p>' +
+      '<p class="note" style="margin-top:12px">Tipp: Oben rechts kannst du zwischen topografischer und stilisierter Hintergrundkarte wechseln. Beide Karten kommen ohne Ortsnamen aus.</p>' +
       '<p class="note">Geodaten: Stadt Leipzig, Amt für Statistik und Wahlen (Datenlizenz Deutschland – Namensnennung 2.0).</p>'
     );
     $('goBtn').addEventListener('click', function () {
