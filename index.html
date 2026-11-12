@@ -213,7 +213,7 @@
   var SOURCES = [
     'ortsteile.geojson',
     REMOTE_URL,
-    'https://corsproxy.io/?url=' + encodeURIComponent(REMOTE_URL)
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(REMOTE_URL)
   ];
   var MAX_TRIES = 3;
 
@@ -362,7 +362,9 @@
   var currentBase = null;
   function setBase(key) {
     if (currentBase) map.removeLayer(baseLayers[currentBase]);
-    baseLayers[key].addTo(map).bringToBack();
+    baseLayers[key].addTo(map);
+    if (baseLayers[key].eachLayer) baseLayers[key].eachLayer(function (l) { l.bringToBack(); });
+    else baseLayers[key].bringToBack();
     currentBase = key;
     $('bmTopo').setAttribute('aria-pressed', key === 'topo');
     $('bmStyle').setAttribute('aria-pressed', key === 'style');
@@ -592,7 +594,7 @@
   function markDone(it, ok) {
     it.state = ok ? 'ok' : 'missed';
     applyStyle(it);
-    if (G.showNames) setLabel(it, 'perm');
+    setLabel(it, 'none');
     G.done++;
     if (ok && G.attempts === 0 && !G.usedHint) G.firstTry++;
     if (!ok || G.attempts > 0 || G.usedHint) { if (G.missed.indexOf(it) === -1) G.missed.push(it); }
@@ -760,7 +762,6 @@
         '<label class="mode"><input type="radio" name="mode" value="learn"><div><b>Lernen</b><span>Freies Erkunden mit Namen beim Überfahren, ohne Wertung.</span></div></label>' +
       '</div>' +
       '<label class="field">Gebiet<select id="selBez">' + bezOptions() + '</select></label>' +
-      '<label class="check"><input type="checkbox" id="chkNames" checked> Namen nach der Antwort auf der Karte anzeigen</label>' +
       '<button class="btn big" id="goBtn" type="button">Spiel starten</button>' +
       '<p class="note" style="margin-top:12px">Tipp: Oben rechts kannst du zwischen topografischer und stilisierter Hintergrundkarte wechseln. Beide Karten kommen ohne Ortsnamen aus.</p>' +
       '<p class="note">Geodaten: Stadt Leipzig, Amt für Statistik und Wahlen (Datenlizenz Deutschland – Namensnennung 2.0).</p>'
@@ -847,11 +848,11 @@
   function showLoadError() {
     showModal(
       '<h2 class="error">Daten konnten nicht geladen werden</h2>' +
-      '<p>Die Ortsteil-Grenzen der Stadt Leipzig sind vom Server nicht abrufbar (vermutlich blockiert der Browser den Zugriff). So klappt es trotzdem:</p>' +
+      '<p>Der Server der Stadt Leipzig erlaubt das Laden von fremden Seiten nicht. Lösung:</p>' +
       '<ol style="line-height:1.6;color:#334155">' +
-        '<li>Datei herunterladen: <a href="' + REMOTE_URL + '" target="_blank" rel="noopener">Ortsteile_Leipzig_UTM33N.json</a></li>' +
-        '<li>Entweder hier auswählen/hineinziehen …</li>' +
-        '<li>… oder dauerhaft als <code>ortsteile.geojson</code> neben die <code>index.html</code> ins Repository legen.</li>' +
+        '<li>Datei herunterladen (Rechtsklick → „Link speichern unter“): <a href="' + REMOTE_URL + '" target="_blank" rel="noopener">Ortsteile_Leipzig_UTM33N.json</a></li>' +
+        '<li>Sie in <code>ortsteile.geojson</code> umbenennen und im GitHub-Repository neben die <code>index.html</code> hochladen (dauerhafte Lösung).</li>' +
+        '<li>Zum schnellen Test: Datei hier auswählen oder hineinziehen.</li>' +
       '</ol>' +
       '<div class="dropzone" id="drop"><input type="file" id="fileIn" accept=".json,.geojson,application/json"><p class="note">oder Datei hierher ziehen</p></div>' +
       '<button class="btn sec big" id="retryBtn" type="button">Erneut versuchen</button>'
