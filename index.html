@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Leipzig Ortsteile-Quiz</title>
-<meta name="description" content="Lerne die 63 Ortsteile Leipzigs – ein Kartenquiz im Stil von Seterra.">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<meta name="description" content="Lerne die Ortsteile Leipzigs – ein Kartenquiz im Stil von Seterra, wahlweise in 3D.">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
   :root {
     --bg: #0f1b2d;
@@ -32,7 +32,7 @@
 
   /* ---------- Kopfzeile ---------- */
   #top {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     padding: 8px 14px; background: var(--bg); color: #fff; min-height: 52px;
   }
   #top h1 { font-size: 1.05rem; margin: 0; letter-spacing: .2px; white-space: nowrap; }
@@ -50,31 +50,24 @@
     padding: 6px 14px; border-radius: 999px; font-size: .88rem;
   }
   .ghost:hover { background: rgba(255,255,255,.12); }
+  .ghost[aria-pressed="true"] { background: #fff; color: var(--ink); font-weight: 600; }
 
   /* ---------- Karte ---------- */
   #stage { position: relative; flex: 1; min-height: 0; }
   #map { position: absolute; inset: 0; background: #dfe7ef; }
-  .leaflet-container { font-family: inherit; }
-
-  /* Ortsteil-Flächen */
-  path.ot { transition: fill-opacity .15s; }
-  path.target { stroke: #111 !important; stroke-width: 4px !important; fill: #fde047 !important; fill-opacity: .75 !important; animation: pulse .9s ease-in-out infinite alternate; }
-  path.hint { stroke: #111 !important; stroke-width: 3px !important; fill-opacity: .8 !important; }
-  @keyframes pulse { from { stroke-opacity: 1; } to { stroke-opacity: .35; } }
-
-  .ot-label {
-    background: rgba(255,255,255,.88); border: 0; box-shadow: 0 1px 3px rgba(0,0,0,.3);
-    color: var(--ink); font-weight: 600; font-size: 10.5px; padding: 1px 5px; border-radius: 4px;
+  .maplibregl-map { font-family: inherit; }
+  #tip {
+    position: absolute; z-index: 1100; pointer-events: none; display: none;
+    background: rgba(15, 27, 45, .92); color: #fff; font-size: .82rem; padding: 4px 9px;
+    border-radius: 6px; white-space: nowrap; transform: translate(12px, -120%);
   }
-  .ot-label::before { display: none; }
-  .labels-off .ot-label.perm { display: none; }
 
   /* ---------- HUD ---------- */
   #hud {
     position: absolute; z-index: 1200; top: 12px; left: 12px; width: min(390px, calc(100% - 24px));
     background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px;
   }
-  #hud[hidden], #modal[hidden], [hidden] { display: none !important; }
+  [hidden] { display: none !important; }
   .hud-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .prompt small { display: block; color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .6px; }
   .prompt strong { font-size: 1.35rem; line-height: 1.15; }
@@ -101,7 +94,7 @@
   /* ---------- Modal ---------- */
   #modal {
     position: absolute; inset: 0; z-index: 1300; display: flex; align-items: center; justify-content: center;
-    padding: 14px; background: rgba(15, 27, 45, .55); overflow: auto;
+    padding: 14px; background: rgba(15, 27, 45, .45); overflow: auto;
   }
   .card {
     background: var(--panel); border-radius: 18px; box-shadow: var(--shadow); width: min(520px, 100%);
@@ -120,8 +113,6 @@
   .mode span { color: var(--muted); font-size: .86rem; }
   .field { display: flex; flex-direction: column; gap: 5px; margin: 12px 0; font-size: .9rem; }
   .field select { font: inherit; padding: 9px 10px; border: 2px solid var(--line); border-radius: 10px; background: #fff; }
-  .check { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: .92rem; }
-  .check input { accent-color: var(--accent); width: 17px; height: 17px; }
   .card .btn.big { width: 100%; padding: 13px; font-size: 1.05rem; margin-top: 10px; }
   .score-big { font-size: 3.4rem; font-weight: 800; line-height: 1; color: var(--accent); }
   .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; text-align: center; }
@@ -138,17 +129,12 @@
   .spinner { width: 34px; height: 34px; border: 4px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 14px auto; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .leaflet-bottom.leaflet-right { margin-bottom: 4px; }
-
   @media (max-width: 640px) {
     #top { gap: 8px; padding: 8px 10px; }
     #top h1 { font-size: .95rem; }
     .opacity { display: none; }
     #hud { top: auto; bottom: 26px; left: 8px; right: 8px; width: auto; }
     .prompt strong { font-size: 1.15rem; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    path.target { animation: none; }
   }
 </style>
 </head>
@@ -157,16 +143,18 @@
 <header id="top">
   <h1>Leipzig <span>Ortsteile-Quiz</span></h1>
   <div class="spacer"></div>
-  <div class="opacity"><label for="opac">Deckkraft</label><input id="opac" type="range" min="0" max="90" value="45"></div>
+  <div class="opacity"><label for="opac">Deckkraft</label><input id="opac" type="range" min="0" max="90" value="50"></div>
   <div class="seg" role="group" aria-label="Hintergrundkarte">
     <button id="bmTopo" type="button" aria-pressed="false">Topografisch</button>
     <button id="bmStyle" type="button" aria-pressed="true">Stilisiert</button>
   </div>
+  <button id="btn3d" class="ghost" type="button" aria-pressed="false" title="Geneigte 3D-Ansicht mit Gebäuden (ab Zoomstufe 13 sichtbar)">3D</button>
   <button id="menuBtn" class="ghost" type="button">Menü</button>
 </header>
 
 <main id="stage">
   <div id="map"></div>
+  <div id="tip"></div>
 
   <section id="hud" hidden aria-live="polite">
     <div class="hud-top">
@@ -187,7 +175,6 @@
     <div class="hud-row buttons">
       <button id="hintBtn" class="btn sec" type="button">Tipp</button>
       <button id="skipBtn" class="btn sec" type="button">Überspringen</button>
-      <button id="labelBtn" class="btn sec" type="button" hidden>Namen an/aus</button>
       <button id="endBtn" class="btn sec" type="button">Beenden</button>
     </div>
   </section>
@@ -199,7 +186,7 @@
 
 <noscript><p style="color:#fff;padding:20px">Dieses Spiel benötigt JavaScript.</p></noscript>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
 (function () {
   'use strict';
@@ -207,45 +194,55 @@
   /* =====================================================================
    *  Konfiguration
    * ===================================================================== */
-  // Amtliche Ortsteilgrenzen (Stadt Leipzig, Amt für Statistik und Wahlen, dl-de/by-2-0)
-  var REMOTE_URL = 'https://static.leipzig.de/fileadmin/mediendatenbank/leipzig-de/Stadt/02.1_Dez1_Allgemeine_Verwaltung/12_Statistik_und_Wahlen/Geodaten/Ortsteile_Leipzig_UTM33N.json';
-  // Lade-Reihenfolge: 1. lokale Datei neben index.html, 2. direkt von der Stadt, 3. über CORS-Proxy
-  var SOURCES = [
-    'ortsteile.geojson',
-    REMOTE_URL,
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(REMOTE_URL)
-  ];
   var MAX_TRIES = 3;
+  var LOCAL_FILE = 'ortsteile.geojson';     // optional: schnellere Variante, siehe "Kartendaten speichern" im Menü
+  var CACHE_KEY = 'lpz-geo-v2';
+  // Overpass-Server (OpenStreetMap-Daten, dürfen von jeder Webseite aus abgerufen werden)
+  var OVERPASS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter'
+  ];
+  var OVERPASS_QUERY =
+    '[out:json][timeout:90];' +
+    'area["wikidata"="Q2079"]["boundary"="administrative"]->.a;' +
+    'rel(area.a)["boundary"="administrative"]["admin_level"~"^(9|10)$"];' +
+    'out geom;';
+  var PALETTE = ['#e76f51', '#2a9d8f', '#e9c46a', '#8ab17d', '#4d908e', '#9b72aa', '#f4a261', '#577590', '#c1666b', '#6d9dc5'];
 
-  // Stadtbezirke (Schlüsselnummer 0–9) mit ihren Ortsteilen (Schlüsselnummer = Bezirk*10 + Index)
-  var BEZIRKE = [
-    { name: 'Mitte',    color: '#e76f51', ot: ['Zentrum', 'Zentrum-Ost', 'Zentrum-Südost', 'Zentrum-Süd', 'Zentrum-West', 'Zentrum-Nordwest', 'Zentrum-Nord'] },
-    { name: 'Nordost',  color: '#2a9d8f', ot: ['Schönefeld-Abtnaundorf', 'Schönefeld-Ost', 'Mockau-Süd', 'Mockau-Nord', 'Thekla', 'Plaußig-Portitz'] },
-    { name: 'Ost',      color: '#e9c46a', ot: ['Neustadt-Neuschönefeld', 'Volkmarsdorf', 'Anger-Crottendorf', 'Sellerhausen-Stünz', 'Paunsdorf', 'Heiterblick', 'Mölkau', 'Engelsdorf', 'Baalsdorf', 'Althen-Kleinpösna'] },
-    { name: 'Südost',   color: '#8ab17d', ot: ['Reudnitz-Thonberg', 'Stötteritz', 'Probstheida', 'Meusdorf', 'Liebertwolkwitz', 'Holzhausen'] },
-    { name: 'Süd',      color: '#4d908e', ot: ['Südvorstadt', 'Connewitz', 'Marienbrunn', 'Lößnig', 'Dölitz-Dösen'] },
-    { name: 'Südwest',  color: '#9b72aa', ot: ['Schleußig', 'Plagwitz', 'Kleinzschocher', 'Großzschocher', 'Knautkleeberg-Knauthain', 'Hartmannsdorf-Knautnaundorf'] },
-    { name: 'West',     color: '#f4a261', ot: ['Schönau', 'Grünau-Ost', 'Grünau-Mitte', 'Grünau-Siedlung', 'Lausen-Grünau', 'Grünau-Nord', 'Miltitz'] },
-    { name: 'Alt-West', color: '#577590', ot: ['Lindenau', 'Altlindenau', 'Neulindenau', 'Leutzsch', 'Böhlitz-Ehrenberg', 'Burghausen-Rückmarsdorf'] },
-    { name: 'Nordwest', color: '#c1666b', ot: ['Möckern', 'Wahren', 'Lützschena-Stahmeln', 'Lindenthal'] },
-    { name: 'Nord',     color: '#6d9dc5', ot: ['Gohlis-Süd', 'Gohlis-Mitte', 'Gohlis-Nord', 'Eutritzsch', 'Seehausen', 'Wiederitzsch'] }
+  // Vektorkarten von OpenFreeMap (kostenlos, ohne Schlüssel); Beschriftungen werden entfernt
+  var STYLE_URL = {
+    topo: 'https://tiles.openfreemap.org/styles/liberty',
+    style: 'https://tiles.openfreemap.org/styles/positron'
+  };
+  var FALLBACK_STYLE = {
+    version: 8,
+    sources: { r: { type: 'raster', tileSize: 256, maxzoom: 18,
+      tiles: ['https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', 'https://b.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png'],
+      attribution: '© OpenStreetMap-Mitwirkende © CARTO' } },
+    layers: [{ id: 'r', type: 'raster', source: 'r' }]
+  };
+
+  // Offizielle Gliederung – nur nötig, falls eine amtliche Datei als ortsteile.geojson hochgeladen wird
+  var STATIC_BEZ = [
+    { name: 'Mitte',    ot: ['Zentrum', 'Zentrum-Ost', 'Zentrum-Südost', 'Zentrum-Süd', 'Zentrum-West', 'Zentrum-Nordwest', 'Zentrum-Nord'] },
+    { name: 'Nordost',  ot: ['Schönefeld-Abtnaundorf', 'Schönefeld-Ost', 'Mockau-Süd', 'Mockau-Nord', 'Thekla', 'Plaußig-Portitz'] },
+    { name: 'Ost',      ot: ['Neustadt-Neuschönefeld', 'Volkmarsdorf', 'Anger-Crottendorf', 'Sellerhausen-Stünz', 'Paunsdorf', 'Heiterblick', 'Mölkau', 'Engelsdorf', 'Baalsdorf', 'Althen-Kleinpösna'] },
+    { name: 'Südost',   ot: ['Reudnitz-Thonberg', 'Stötteritz', 'Probstheida', 'Meusdorf', 'Liebertwolkwitz', 'Holzhausen'] },
+    { name: 'Süd',      ot: ['Südvorstadt', 'Connewitz', 'Marienbrunn', 'Lößnig', 'Dölitz-Dösen'] },
+    { name: 'Südwest',  ot: ['Schleußig', 'Plagwitz', 'Kleinzschocher', 'Großzschocher', 'Knautkleeberg-Knauthain', 'Hartmannsdorf-Knautnaundorf'] },
+    { name: 'West',     ot: ['Schönau', 'Grünau-Ost', 'Grünau-Mitte', 'Grünau-Siedlung', 'Lausen-Grünau', 'Grünau-Nord', 'Miltitz'] },
+    { name: 'Alt-West', ot: ['Lindenau', 'Altlindenau', 'Neulindenau', 'Leutzsch', 'Böhlitz-Ehrenberg', 'Burghausen-Rückmarsdorf'] },
+    { name: 'Nordwest', ot: ['Möckern', 'Wahren', 'Lützschena-Stahmeln', 'Lindenthal'] },
+    { name: 'Nord',     ot: ['Gohlis-Süd', 'Gohlis-Mitte', 'Gohlis-Nord', 'Eutritzsch', 'Seehausen', 'Wiederitzsch'] }
   ];
 
-  /* =====================================================================
-   *  Hilfsfunktionen
-   * ===================================================================== */
-  function $(id) { return document.getElementById(id); }
-
-  function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
-  function safeSet(key, val) { try { localStorage.setItem(key, val); } catch (e) { /* ignorieren */ } }
-
-  // "Grünau-Süd" -> "gruenausued" (für Vergleiche)
+  /* PURE:START ---------------------------------------------------------- */
   function norm(s) {
     return String(s).toLowerCase().replace(/ß/g, 'ss').replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/[^a-z0-9]/g, '');
   }
-  // "Grünau-Süd" -> "grunausud" (Tippen ohne Umlaute)
   function norm2(s) {
-    return String(s).toLowerCase().replace(/ß/g, 'ss').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+    return String(s).toLowerCase().replace(/ß/g, 'ss').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
   }
   function lev(a, b) {
     var m = a.length, n = b.length, i, j, prev, cur, tmp;
@@ -285,9 +282,7 @@
     s = s % 60; return m + ':' + (s < 10 ? '0' : '') + s;
   }
 
-  /* =====================================================================
-   *  Koordinaten: UTM33N (ETRS89) -> WGS84 (ohne Zusatzbibliothek)
-   * ===================================================================== */
+  /* ---------- Geometrie ---------- */
   function utmToLatLon(E, N, zone) {
     var a = 6378137.0, f = 1 / 298.257222101, k0 = 0.9996;
     var e2 = f * (2 - f), ep2 = e2 / (1 - e2);
@@ -316,83 +311,139 @@
   }
   function firstCoord(c) { while (Array.isArray(c[0])) c = c[0]; return c; }
   function mapCoords(c, fn) { return typeof c[0] === 'number' ? fn(c) : c.map(function (x) { return mapCoords(x, fn); }); }
+  function eachCoord(c, fn) { if (typeof c[0] === 'number') fn(c); else c.forEach(function (x) { eachCoord(x, fn); }); }
 
-  // Erkennt projizierte Koordinaten und rechnet sie bei Bedarf nach WGS84 um
   function ensureWgs84(fc) {
     var probe = null, i, g;
     for (i = 0; i < fc.features.length && !probe; i++) {
       g = fc.features[i].geometry;
       if (g && g.coordinates && g.coordinates.length) probe = firstCoord(g.coordinates);
     }
-    if (!probe || Math.abs(probe[0]) <= 360) return fc;   // bereits Grad
+    if (!probe || Math.abs(probe[0]) <= 360) return fc;
     fc.features.forEach(function (f) {
       if (!f.geometry) return;
       f.geometry.coordinates = mapCoords(f.geometry.coordinates, function (p) {
         var x = p[0], y = p[1];
-        if (x > 1e7) x -= 33e6;           // Variante mit vorangestellter Zonennummer (33xxxxxx)
+        if (x > 1e7) x -= 33e6;
         return utmToLatLon(x, y, 33);
       });
     });
     return fc;
   }
 
-  /* =====================================================================
-   *  Karte & Hintergrundkarten
-   * ===================================================================== */
-  var map = L.map('map', { zoomSnap: 0.25, zoomDelta: 0.5, minZoom: 9, maxZoom: 17, zoomControl: false })
-    .setView([51.34, 12.375], 11);
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  function same(p, q) { return p[0] === q[0] && p[1] === q[1]; }
 
-  var baseLayers = {
-    // Topografisch ohne Beschriftungen: Esri-Geländekarte + Schummerung (beide ohne Ortsnamen)
-    topo: L.layerGroup([
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 17, maxNativeZoom: 13,
-        attribution: 'Tiles © Esri — Source: USGS, Esri, TANA, DeLorme, NGA'
-      }),
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 17, maxNativeZoom: 16, opacity: 0.55
-      })
-    ]),
-    style: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-      maxZoom: 17, subdomains: 'abcd',
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende © <a href="https://carto.com/attributions">CARTO</a>'
-    })
-  };
-  var currentBase = null;
-  function setBase(key) {
-    if (currentBase) map.removeLayer(baseLayers[currentBase]);
-    baseLayers[key].addTo(map);
-    if (baseLayers[key].eachLayer) baseLayers[key].eachLayer(function (l) { l.bringToBack(); });
-    else baseLayers[key].bringToBack();
-    currentBase = key;
-    $('bmTopo').setAttribute('aria-pressed', key === 'topo');
-    $('bmStyle').setAttribute('aria-pressed', key === 'style');
-    safeSet('lpz-base', key);
-    refreshStyles();
+  // Fügt einzelne Linienstücke (Ways) zu geschlossenen Ringen zusammen
+  function stitch(ways) {
+    var rings = [], pool = ways.map(function (w) { return w.slice(); });
+    while (pool.length) {
+      var cur = pool.shift(), changed = true;
+      while (changed && !same(cur[0], cur[cur.length - 1])) {
+        changed = false;
+        for (var i = 0; i < pool.length; i++) {
+          var w = pool[i], a = cur[0], b = cur[cur.length - 1];
+          if (same(b, w[0])) cur = cur.concat(w.slice(1));
+          else if (same(b, w[w.length - 1])) cur = cur.concat(w.slice(0, -1).reverse());
+          else if (same(a, w[w.length - 1])) cur = w.slice(0, -1).concat(cur);
+          else if (same(a, w[0])) cur = w.slice(1).reverse().concat(cur);
+          else continue;
+          pool.splice(i, 1); changed = true; break;
+        }
+      }
+      if (cur.length >= 3) {
+        if (!same(cur[0], cur[cur.length - 1])) cur.push(cur[0]);
+        if (cur.length >= 4) rings.push(cur);
+      }
+    }
+    return rings;
   }
-  $('bmTopo').addEventListener('click', function () { setBase('topo'); });
-  $('bmStyle').addEventListener('click', function () { setBase('style'); });
 
-  map.on('zoomend', function () {
-    map.getContainer().classList.toggle('labels-off', map.getZoom() < 11);
-  });
+  function pointInRing(pt, ring) {
+    var x = pt[0], y = pt[1], inside = false, i, j;
+    for (i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  // polys: Liste von Polygonen, jedes = [außenring, loch, loch …]
+  function pointInPolys(pt, polys) {
+    for (var i = 0; i < polys.length; i++) {
+      if (pointInRing(pt, polys[i][0])) {
+        var hole = false;
+        for (var k = 1; k < polys[i].length; k++) if (pointInRing(pt, polys[i][k])) { hole = true; break; }
+        if (!hole) return true;
+      }
+    }
+    return false;
+  }
+  function ringArea(r) {
+    var s = 0, i, j;
+    for (i = 0, j = r.length - 1; i < r.length; j = i++) s += (r[j][0] + r[i][0]) * (r[j][1] - r[i][1]);
+    return Math.abs(s / 2);
+  }
+  function rnd(r) { return r.map(function (p) { return [Math.round(p[0] * 1e5) / 1e5, Math.round(p[1] * 1e5) / 1e5]; }); }
 
-  /* =====================================================================
-   *  Daten
-   * ===================================================================== */
-  var items = [];           // { name, bez, code, layer, state, inPool }
-  var geoGroup = null;
-  var fillOpacity = 0.45;
-
-  var byNorm = {}, byCode = {};
-  BEZIRKE.forEach(function (b, bi) {
-    b.ot.forEach(function (n, i) {
-      var rec = { name: n, bez: bi, code: bi * 10 + i };
-      byNorm[norm(n)] = rec; byCode[rec.code] = rec;
+  // OSM-Relation (out geom) -> Liste von Polygonen
+  function relToPolys(rel) {
+    var outer = [], inner = [];
+    (rel.members || []).forEach(function (m) {
+      if (m.type !== 'way' || !m.geometry || m.geometry.length < 2) return;
+      var line = m.geometry.map(function (g) { return [g.lon, g.lat]; });
+      (m.role === 'inner' ? inner : outer).push(line);
     });
-  });
+    var outers = stitch(outer), inners = stitch(inner);
+    return outers.map(function (o) {
+      var poly = [o];
+      inners.forEach(function (h) { if (pointInRing(h[0], o)) poly.push(h); });
+      return poly;
+    });
+  }
 
+  function buildFromOverpass(json) {
+    if (!json || !Array.isArray(json.elements)) throw new Error('unerwartete Antwort');
+    var rels = json.elements.filter(function (e) { return e.type === 'relation' && e.tags && e.tags.name; });
+    var bezRels = [], otRels = [];
+    rels.forEach(function (r) {
+      var lvl = String(r.tags.admin_level);
+      if (lvl === '9') bezRels.push(r); else if (lvl === '10') otRels.push(r);
+    });
+    if (otRels.length < 10) throw new Error('zu wenige Ortsteile in der Antwort');
+
+    var bezirke = bezRels.map(function (r, i) {
+      return { name: r.tags.name.replace(/^(Stadtbezirk|Leipzig)[\s-]+/i, ''), polys: relToPolys(r) };
+    }).sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+    var bezOut = bezirke.map(function (b, i) { return { name: b.name, color: PALETTE[i % PALETTE.length] }; });
+    if (!bezOut.length) bezOut.push({ name: '', color: PALETTE[9] });
+
+    var feats = [];
+    otRels.forEach(function (r) {
+      var polys = relToPolys(r);
+      if (!polys.length) return;
+      // Stadtbezirk durch Mehrheitsentscheid über Stützpunkte des größten Rings
+      var bez = 0;
+      if (bezirke.length) {
+        var big = polys.slice().sort(function (a, b) { return ringArea(b[0]) - ringArea(a[0]); })[0][0];
+        var step = Math.max(1, Math.floor(big.length / 30)), votes = {}, best = -1, bestN = 0, i, k;
+        for (i = 0; i < big.length; i += step) {
+          for (k = 0; k < bezirke.length; k++) {
+            if (pointInPolys(big[i], bezirke[k].polys)) { votes[k] = (votes[k] || 0) + 1; break; }
+          }
+        }
+        for (k in votes) if (votes[k] > bestN) { bestN = votes[k]; best = Number(k); }
+        bez = best >= 0 ? best : 0;
+      }
+      var coords = polys.map(function (p) { return p.map(rnd); });
+      feats.push({
+        type: 'Feature',
+        properties: { name: r.tags.name, key: norm(r.tags.name), bez: bez },
+        geometry: coords.length === 1 ? { type: 'Polygon', coordinates: coords[0] } : { type: 'MultiPolygon', coordinates: coords }
+      });
+    });
+    return { type: 'FeatureCollection', lpz: 2, bezirke: bezOut, features: feats };
+  }
+
+  // Amtliche Datei der Stadt (falls als ortsteile.geojson hochgeladen) -> internes Format
   function pickName(p) {
     var keys = ['Name', 'NAME', 'name', 'OT_NAME', 'Ortsteil', 'ORTSTEIL', 'ortsteil'], i;
     for (i = 0; i < keys.length; i++) if (p[keys[i]] != null && p[keys[i]] !== '') return String(p[keys[i]]);
@@ -401,127 +452,251 @@
   }
   function pickCode(p) {
     var keys = ['OT', 'OT_NR', 'Nr', 'NR', 'ot', 'Ortsteil_Nr'], i, v;
-    for (i = 0; i < keys.length; i++) {
-      v = parseInt(p[keys[i]], 10);
-      if (!isNaN(v)) return v;
-    }
+    for (i = 0; i < keys.length; i++) { v = parseInt(p[keys[i]], 10); if (!isNaN(v)) return v; }
     return null;
   }
+  function officialToPre(fc) {
+    var byNorm = {}, byCode = {};
+    STATIC_BEZ.forEach(function (b, bi) {
+      b.ot.forEach(function (n, i) { var rec = { name: n, bez: bi }; byNorm[norm(n)] = rec; byCode[bi * 10 + i] = rec; });
+    });
+    fc = ensureWgs84(fc);
+    var feats = [];
+    fc.features.forEach(function (f) {
+      if (!f.geometry) return;
+      var p = f.properties || {}, raw = pickName(p), code = pickCode(p);
+      var rec = (raw && byNorm[norm(raw)]) || (code != null && byCode[code]) || null;
+      var name = rec ? rec.name : (raw || 'Ortsteil ' + code);
+      var bez = rec ? rec.bez : 0;
+      feats.push({ type: 'Feature', properties: { name: name, key: norm(name), bez: bez }, geometry: f.geometry });
+    });
+    return {
+      type: 'FeatureCollection', lpz: 2, features: feats,
+      bezirke: STATIC_BEZ.map(function (b, i) { return { name: b.name, color: PALETTE[i % PALETTE.length] }; })
+    };
+  }
+  function toPre(fc) {
+    if (!fc || fc.type !== 'FeatureCollection' || !Array.isArray(fc.features) || fc.features.length < 10) throw new Error('ungültiges GeoJSON');
+    return fc.lpz === 2 && Array.isArray(fc.bezirke) ? fc : officialToPre(fc);
+  }
+  /* PURE:END ------------------------------------------------------------ */
 
-  function buildLayers(fc) {
-    if (geoGroup) map.removeLayer(geoGroup);
-    items = [];
-    var seen = {};
-    geoGroup = L.geoJSON(fc, {
-      style: function () { return { weight: 1.4, color: '#0f172a', opacity: 0.75, fillOpacity: fillOpacity, className: 'ot' }; },
-      onEachFeature: function (feature, layer) {
-        var p = feature.properties || {};
-        var rawName = pickName(p), code = pickCode(p);
-        var rec = (rawName && byNorm[norm(rawName)]) || (code != null && byCode[code]) || null;
-        var bez = rec ? rec.bez : (code != null ? Math.floor(code / 10) : 0);
-        if (bez < 0 || bez > 9) bez = 0;
-        var name = rec ? rec.name : (rawName || 'Ortsteil ' + code);
-        var key = norm(name);
-        if (seen[key]) {                       // zusammengehörige Teilflächen nicht doppelt zählen
-          layer.__dup = seen[key];
-          seen[key].extra.push(layer);
-          bindLayerEvents(layer, seen[key]);
-          return;
-        }
-        var item = { name: name, bez: bez, code: code, layer: layer, extra: [], state: 'idle', inPool: true };
-        seen[key] = item; items.push(item);
-        bindLayerEvents(layer, item);
-      }
-    }).addTo(map);
-    refreshStyles();
-    var b = geoGroup.getBounds();
-    if (b.isValid()) {
-      map.fitBounds(b, { padding: [24, 24] });
-      map.setMaxBounds(b.pad(0.8));
+  /* =====================================================================
+   *  Hilfen
+   * ===================================================================== */
+  function $(id) { return document.getElementById(id); }
+  function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function safeSet(key, val) { try { localStorage.setItem(key, val); return true; } catch (e) { return false; } }
+
+  /* =====================================================================
+   *  Karte
+   * ===================================================================== */
+  var currentBase = safeGet('lpz-base') === 'topo' ? 'topo' : 'style';
+  var threeD = false;
+  var styleReady = false, vecSource = null, baseTimer = null;
+  var fillOpacity = 0.5;
+
+  var map = new maplibregl.Map({
+    container: 'map',
+    style: STYLE_URL[currentBase],
+    center: [12.375, 51.34], zoom: 10.5, minZoom: 8, maxZoom: 18, maxPitch: 75,
+    attributionControl: { compact: true }
+  });
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+  map.on('style.load', onStyleLoad);
+  armFallback();
+
+  function armFallback() {
+    clearTimeout(baseTimer);
+    baseTimer = setTimeout(function () {
+      if (!styleReady) map.setStyle(FALLBACK_STYLE, { diff: false });   // Kartenserver nicht erreichbar -> einfache Rasterkarte
+    }, 9000);
+  }
+
+  function onStyleLoad() {
+    styleReady = true;
+    clearTimeout(baseTimer);
+    var st = map.getStyle();
+    vecSource = null;
+    Object.keys(st.sources || {}).forEach(function (k) { if (!vecSource && st.sources[k].type === 'vector') vecSource = k; });
+    // Beschriftungen und vorhandene 3D-Gebäude entfernen (Namen würden die Antworten verraten)
+    st.layers.slice().forEach(function (l) {
+      if (l.type === 'symbol' || l.type === 'fill-extrusion') { try { map.removeLayer(l.id); } catch (e) { /* ignorieren */ } }
+    });
+    if (currentBase === 'topo') {
+      try {
+        map.addSource('dem', {
+          type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 14,
+          tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          attribution: 'Höhendaten: Mapzen / AWS Terrain Tiles'
+        });
+        map.addLayer({ id: 'hill', type: 'hillshade', source: 'dem',
+          paint: { 'hillshade-exaggeration': 0.4, 'hillshade-shadow-color': '#4a5a44', 'hillshade-highlight-color': '#ffffff', 'hillshade-accent-color': '#6b7a62' } });
+      } catch (e) { /* ohne Relief weiter */ }
     }
-    map.fire('zoomend');
+    ensureLayers();
+    refreshStyles();
   }
 
-  function layersOf(item) { return [item.layer].concat(item.extra || []); }
-
-  function styleFor(item) {
-    var base = { weight: 1.4, color: '#0f172a', opacity: 0.75 };
-    if (!item.inPool) { base.fillColor = '#94a3b8'; base.fillOpacity = Math.min(fillOpacity, 0.25); return base; }
-    if (item.state === 'ok')     { base.fillColor = '#22c55e'; base.fillOpacity = Math.max(fillOpacity, 0.55); return base; }
-    if (item.state === 'missed') { base.fillColor = '#f59e0b'; base.fillOpacity = Math.max(fillOpacity, 0.55); return base; }
-    base.fillColor = BEZIRKE[item.bez].color; base.fillOpacity = fillOpacity;
-    return base;
+  function ensureLayers() {
+    if (!DATA || !styleReady) return;
+    if (!map.getSource('ot')) map.addSource('ot', { type: 'geojson', data: DATA, promoteId: 'key' });
+    if (!map.getLayer('ot-fill')) {
+      map.addLayer({ id: 'ot-fill', type: 'fill', source: 'ot', paint: {
+        'fill-color': ['coalesce', ['feature-state', 'fill'], '#94a3b8'],
+        'fill-opacity': ['coalesce', ['feature-state', 'op'], 0.5]
+      } });
+    }
+    if (!map.getLayer('ot-line')) {
+      map.addLayer({ id: 'ot-line', type: 'line', source: 'ot', layout: { 'line-join': 'round' }, paint: {
+        'line-color': ['coalesce', ['feature-state', 'lc'], '#0f172a'],
+        'line-width': ['coalesce', ['feature-state', 'lw'], 1.4],
+        'line-opacity': 0.85
+      } });
+    }
+    if (vecSource && !map.getLayer('bld3d')) {
+      map.addLayer({ id: 'bld3d', type: 'fill-extrusion', source: vecSource, 'source-layer': 'building', minzoom: 13,
+        layout: { visibility: threeD ? 'visible' : 'none' },
+        paint: {
+          'fill-extrusion-color': currentBase === 'topo' ? '#d8cfc4' : '#cfd6df',
+          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6],
+          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+          'fill-extrusion-opacity': 0.88
+        } });
+    }
   }
-  function applyStyle(item) { layersOf(item).forEach(function (l) { l.setStyle(styleFor(item)); }); }
-  function refreshStyles() { items.forEach(applyStyle); }
+
+  function setBase(key) {
+    currentBase = key;
+    $('bmTopo').setAttribute('aria-pressed', String(key === 'topo'));
+    $('bmStyle').setAttribute('aria-pressed', String(key === 'style'));
+    safeSet('lpz-base', key);
+    if (!styleReady && !map.isStyleLoaded() && !DATA && !map.loaded()) { /* Startphase: normal weiter */ }
+    styleReady = false;
+    map.setStyle(STYLE_URL[key], { diff: false });
+    armFallback();
+  }
+  $('bmTopo').addEventListener('click', function () { if (currentBase !== 'topo') setBase('topo'); });
+  $('bmStyle').addEventListener('click', function () { if (currentBase !== 'style') setBase('style'); });
+  $('bmTopo').setAttribute('aria-pressed', String(currentBase === 'topo'));
+  $('bmStyle').setAttribute('aria-pressed', String(currentBase === 'style'));
+
+  $('btn3d').addEventListener('click', function () {
+    threeD = !threeD;
+    this.setAttribute('aria-pressed', String(threeD));
+    if (map.getLayer('bld3d')) map.setLayoutProperty('bld3d', 'visibility', threeD ? 'visible' : 'none');
+    var opts = { pitch: threeD ? 60 : 0, bearing: threeD ? -20 : 0, duration: 900 };
+    if (threeD && map.getZoom() < 13) opts.zoom = 13;      // Gebäude gibt es erst ab Zoomstufe 13
+    map.easeTo(opts);
+  });
+
+  /* =====================================================================
+   *  Daten & Ortsteile
+   * ===================================================================== */
+  var DATA = null;          // internes GeoJSON
+  var DATA_SRC = '';
+  var BEZ = [];
+  var items = [], byKey = {};
+
+  function bezName(i) { return BEZ[i] && BEZ[i].name ? BEZ[i].name : ''; }
+
+  function buildItems(pre) {
+    DATA = pre; BEZ = pre.bezirke || [];
+    items = []; byKey = {};
+    pre.features.forEach(function (f) {
+      var key = f.properties.key, b = bboxOf(f.geometry), it = byKey[key];
+      if (it) {
+        it.bounds = [[Math.min(it.bounds[0][0], b[0][0]), Math.min(it.bounds[0][1], b[0][1])],
+                     [Math.max(it.bounds[1][0], b[1][0]), Math.max(it.bounds[1][1], b[1][1])]];
+        return;
+      }
+      it = { name: f.properties.name, key: key, bez: f.properties.bez || 0, bounds: b, inPool: true, state: 'idle', flags: {} };
+      byKey[key] = it; items.push(it);
+    });
+  }
+  function bboxOf(geom) {
+    var b = [[Infinity, Infinity], [-Infinity, -Infinity]];
+    eachCoord(geom.coordinates, function (p) {
+      if (p[0] < b[0][0]) b[0][0] = p[0]; if (p[1] < b[0][1]) b[0][1] = p[1];
+      if (p[0] > b[1][0]) b[1][0] = p[0]; if (p[1] > b[1][1]) b[1][1] = p[1];
+    });
+    return b;
+  }
+
+  function styleOf(it) {
+    var s = { fill: BEZ[it.bez] ? BEZ[it.bez].color : '#6d9dc5', op: fillOpacity, lw: 1.4, lc: '#0f172a' };
+    if (!it.inPool) { s.fill = '#94a3b8'; s.op = Math.min(fillOpacity, 0.25); }
+    else if (it.state === 'ok') { s.fill = '#22c55e'; s.op = Math.max(fillOpacity, 0.6); }
+    else if (it.state === 'missed') { s.fill = '#f59e0b'; s.op = Math.max(fillOpacity, 0.6); }
+    var f = it.flags;
+    if (f.hint) { s.lw = 3; s.lc = '#111111'; s.op = Math.max(s.op, 0.8); }
+    if (f.wrong) { s.fill = '#ef4444'; s.op = 0.8; }
+    if (f.target) { s.fill = '#fde047'; s.op = 0.85; s.lw = 4; s.lc = '#111111'; }
+    return s;
+  }
+  function applyItem(it) {
+    if (!styleReady || !map.getSource('ot')) return;
+    map.setFeatureState({ source: 'ot', id: it.key }, styleOf(it));
+  }
+  function refreshStyles() { items.forEach(applyItem); }
+  function setFlag(it, name, on) { it.flags[name] = on; applyItem(it); }
+  function clearFlags() {
+    items.forEach(function (it) {
+      if (it.flags.target || it.flags.hint || it.flags.wrong) { it.flags = {}; applyItem(it); }
+    });
+  }
 
   $('opac').addEventListener('input', function (e) {
     fillOpacity = Number(e.target.value) / 100;
     refreshStyles();
   });
 
-  /* ---------- Beschriftungen ---------- */
-  function setLabel(item, mode) {   // 'none' | 'hover' | 'perm'
-    layersOf(item).forEach(function (l, idx) {
-      l.unbindTooltip();
-      if (mode === 'none') return;
-      if (mode === 'perm' && idx > 0) return;
-      var txt = mode === 'hover' ? item.name + ' (Stadtbezirk ' + BEZIRKE[item.bez].name + ')' : item.name;
-      l.bindTooltip(txt, mode === 'perm'
-        ? { permanent: true, direction: 'center', className: 'ot-label perm', opacity: 1 }
-        : { sticky: true, direction: 'top', className: 'ot-label', opacity: 1 });
-      if (mode === 'perm') l.openTooltip();
-    });
+  // Klick- und Hover-Ereignisse
+  function itemFromEvent(e) {
+    var f = e.features && e.features[0];
+    return f ? byKey[f.properties.key] : null;
   }
+  map.on('click', 'ot-fill', function (e) { var it = itemFromEvent(e); if (it) onItemClick(it); });
+  map.on('mousemove', 'ot-fill', function (e) {
+    map.getCanvas().style.cursor = 'pointer';
+    var tip = $('tip');
+    if (G && G.mode === 'learn') {
+      var it = itemFromEvent(e);
+      if (it) {
+        tip.textContent = it.name + (bezName(it.bez) ? ' · ' + bezName(it.bez) : '');
+        tip.style.left = e.point.x + 'px'; tip.style.top = e.point.y + 'px'; tip.style.display = 'block';
+      }
+    } else tip.style.display = 'none';
+  });
+  map.on('mouseleave', 'ot-fill', function () { map.getCanvas().style.cursor = ''; $('tip').style.display = 'none'; });
 
   /* =====================================================================
-   *  Spielzustand
+   *  Spiellogik
    * ===================================================================== */
-  var G = null;   // aktuelles Spiel
-  var learnLabels = false;
-
-  function bindLayerEvents(layer, item) {
-    layer.on('click', function () { onLayerClick(item); });
-    layer.on('mouseover', function () {
-      if (G && G.mode !== 'learn' && item.inPool && item.state === 'idle') layer.setStyle({ weight: 2.6 });
-    });
-    layer.on('mouseout', function () { if (G) applyStyle(item); });
-  }
-
-  function clearMarks() {
-    items.forEach(function (it) {
-      layersOf(it).forEach(function (l) {
-        var el = l.getElement && l.getElement();
-        if (el) el.classList.remove('target', 'hint');
-      });
-    });
-  }
+  var G = null;
 
   function resetItems(pool) {
     items.forEach(function (it) {
-      it.state = 'idle';
+      it.state = 'idle'; it.flags = {};
       it.inPool = !pool || pool.indexOf(it) !== -1;
-      setLabel(it, 'none');
     });
-    clearMarks();
     refreshStyles();
   }
 
   function startGame(mode, opts) {
     opts = opts || {};
-    var bezFilter = opts.bez != null ? opts.bez : $('selBez') ? $('selBez').value : 'all';
+    var bezFilter = opts.bez != null ? opts.bez : ($('selBez') ? $('selBez').value : 'all');
     var pool = items.filter(function (it) {
       if (opts.only) return opts.only.indexOf(it) !== -1;
       return bezFilter === 'all' || String(it.bez) === String(bezFilter);
     });
     if (!pool.length) return;
-    var showNames = $('chkNames') ? $('chkNames').checked : true;
     resetItems(mode === 'learn' ? null : pool);
 
     G = {
       mode: mode, bez: bezFilter, pool: pool, queue: shuffle(pool.slice()), total: pool.length,
       done: 0, firstTry: 0, wrong: 0, missed: [], current: null, attempts: 0, usedHint: false,
-      locked: false, start: Date.now(), timer: null, showNames: showNames, ended: false
+      locked: false, start: Date.now(), timer: null, ended: false
     };
 
     hideModal();
@@ -529,7 +704,6 @@
     $('typeRow').hidden = mode !== 'type';
     $('hintBtn').hidden = mode !== 'find';
     $('skipBtn').hidden = mode === 'learn';
-    $('labelBtn').hidden = mode !== 'learn';
     $('barFill').style.width = '0%';
     $('sOk').textContent = '0'; $('sBad').textContent = '0';
     $('sProg').textContent = '0/' + G.total;
@@ -539,27 +713,23 @@
     if (mode === 'learn') {
       $('promptLbl').textContent = 'Lernmodus';
       $('target').textContent = 'Fahre / tippe über die Karte';
-      $('barFill').style.width = '0%';
-      learnLabels = false;
-      items.forEach(function (it) { setLabel(it, 'hover'); });
-      G.timer = null;
       $('sProg').textContent = G.total + ' Ortsteile';
       $('sTime').textContent = '';
       $('sOk').parentNode.hidden = true; $('sBad').parentNode.hidden = true;
       return;
     }
     $('sOk').parentNode.hidden = false; $('sBad').parentNode.hidden = false;
-
     G.timer = setInterval(function () { $('sTime').textContent = fmtTime(Date.now() - G.start); }, 250);
     nextQuestion();
   }
 
   function nextQuestion() {
-    clearMarks();
+    clearFlags();
     if (!G.queue.length) { finishGame(); return; }
     G.current = G.queue.shift();
     G.attempts = 0; G.usedHint = false; G.locked = false;
     var it = G.current;
+    feedback('', '');
     if (G.mode === 'find') {
       $('promptLbl').textContent = 'Finde den Ortsteil';
       $('target').textContent = it.name;
@@ -571,19 +741,16 @@
     }
   }
 
+  function inView(b) {
+    var v = map.getBounds();
+    return v.contains([b[0][0], b[0][1]]) && v.contains([b[1][0], b[1][1]]);
+  }
   function markTarget(it) {
-    layersOf(it).forEach(function (l) {
-      var el = l.getElement && l.getElement();
-      if (el) el.classList.add('target');
-      l.bringToFront();
-    });
-    var b = L.featureGroup(layersOf(it)).getBounds();
-    if (!map.getBounds().contains(b)) map.flyToBounds(b, { maxZoom: 13, padding: [60, 60] });
+    setFlag(it, 'target', true);
+    if (!inView(it.bounds)) map.fitBounds(it.bounds, { maxZoom: 13.5, padding: 90, duration: 700 });
   }
 
-  function feedback(text, cls) {
-    var f = $('feedback'); f.textContent = text; f.className = cls || '';
-  }
+  function feedback(text, cls) { var f = $('feedback'); f.textContent = text; f.className = cls || ''; }
 
   function updateStats() {
     $('sOk').textContent = G.firstTry; $('sBad').textContent = G.wrong;
@@ -593,8 +760,7 @@
 
   function markDone(it, ok) {
     it.state = ok ? 'ok' : 'missed';
-    applyStyle(it);
-    setLabel(it, 'none');
+    applyItem(it);
     G.done++;
     if (ok && G.attempts === 0 && !G.usedHint) G.firstTry++;
     if (!ok || G.attempts > 0 || G.usedHint) { if (G.missed.indexOf(it) === -1) G.missed.push(it); }
@@ -603,11 +769,9 @@
 
   function reveal(it, msg) {
     G.locked = true;
-    clearMarks();
+    clearFlags();
     if (G.mode === 'type') $('target').textContent = it.name;
-    layersOf(it).forEach(function (l) {
-      var el = l.getElement && l.getElement(); if (el) el.classList.add('target'); l.bringToFront();
-    });
+    setFlag(it, 'target', true);
     feedback(msg, 'bad');
     markDone(it, false);
     setTimeout(function () { if (G && !G.ended) nextQuestion(); }, 1500);
@@ -616,7 +780,7 @@
   function correct(it) {
     G.locked = true;
     feedback(G.attempts === 0 && !G.usedHint ? 'Richtig! ✔' : 'Richtig – aber nicht auf Anhieb.', 'ok');
-    clearMarks();
+    clearFlags();
     markDone(it, true);
     setTimeout(function () { if (G && !G.ended) nextQuestion(); }, 600);
   }
@@ -625,28 +789,27 @@
     G.attempts++; G.wrong++;
     $('sBad').textContent = G.wrong;
     if (clicked) {
-      clicked.layers.forEach(function (l) { l.setStyle({ fillColor: '#ef4444', fillOpacity: 0.8 }); });
-      setTimeout(function () { applyStyle(clicked.item); }, 600);
+      setFlag(clicked, 'wrong', true);
+      setTimeout(function () { setFlag(clicked, 'wrong', false); }, 600);
     }
     if (G.attempts >= MAX_TRIES) {
       reveal(G.current, 'Leider nicht gefunden: ' + G.current.name);
     } else {
       var left = MAX_TRIES - G.attempts;
-      feedback((clicked ? 'Das war: ' + clicked.item.name + '. ' : 'Nicht ganz. ') + 'Noch ' + left + (left === 1 ? ' Versuch.' : ' Versuche.'), 'bad');
+      feedback((clicked ? 'Das war: ' + clicked.name + '. ' : 'Nicht ganz. ') + 'Noch ' + left + (left === 1 ? ' Versuch.' : ' Versuche.'), 'bad');
     }
   }
 
-  function onLayerClick(item) {
+  function onItemClick(item) {
     if (!G || G.ended) return;
     if (G.mode === 'learn') {
-      var l = item.layer; l.openTooltip && l.openTooltip();
+      clearFlags(); setFlag(item, 'hint', true);
       $('target').textContent = item.name;
-      $('promptLbl').textContent = 'Stadtbezirk ' + BEZIRKE[item.bez].name;
+      $('promptLbl').textContent = bezName(item.bez) ? 'Stadtbezirk ' + bezName(item.bez) : 'Ortsteil';
       return;
     }
     if (G.mode !== 'find' || G.locked || !item.inPool || item.state !== 'idle') return;
-    if (item === G.current) correct(item);
-    else wrongTry({ item: item, layers: layersOf(item) });
+    if (item === G.current) correct(item); else wrongTry(item);
   }
 
   /* ---------- Tippen ---------- */
@@ -660,13 +823,8 @@
       var other = G.pool.some(function (it) { return it !== target && exactly(typed, it.name); });
       if (!other) ok = similar(typed, target.name);
     }
-    if (ok) {
-      $('target').textContent = target.name;
-      correct(target);
-    } else {
-      wrongTry(null);
-      if (!G.locked) { $('ans').select(); }
-    }
+    if (ok) { $('target').textContent = target.name; correct(target); }
+    else { wrongTry(null); if (!G.locked) $('ans').select(); }
   }
   $('submitBtn').addEventListener('click', submitTyped);
   $('ans').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submitTyped(); } });
@@ -674,7 +832,6 @@
   /* ---------- Steuerung ---------- */
   $('skipBtn').addEventListener('click', function () {
     if (!G || G.locked || G.mode === 'learn') return;
-    if (G.mode === 'type') $('target').textContent = G.current.name;
     reveal(G.current, 'Übersprungen: ' + G.current.name);
   });
 
@@ -683,18 +840,9 @@
     G.usedHint = true;
     var cur = G.current;
     var group = items.filter(function (it) { return it.bez === cur.bez; });
-    var layers = [];
-    group.forEach(function (it) { layers = layers.concat(layersOf(it)); });
-    layers.forEach(function (l) { var el = l.getElement && l.getElement(); if (el) el.classList.add('hint'); });
-    feedback('Tipp: Gesucht ist im Stadtbezirk ' + BEZIRKE[cur.bez].name + ' (hervorgehoben).', '');
-    setTimeout(function () {
-      layers.forEach(function (l) { var el = l.getElement && l.getElement(); if (el) el.classList.remove('hint'); });
-    }, 2200);
-  });
-
-  $('labelBtn').addEventListener('click', function () {
-    learnLabels = !learnLabels;
-    items.forEach(function (it) { setLabel(it, learnLabels ? 'perm' : 'hover'); });
+    group.forEach(function (it) { setFlag(it, 'hint', true); });
+    feedback(bezName(cur.bez) ? 'Tipp: Gesucht ist im Stadtbezirk ' + bezName(cur.bez) + ' (hervorgehoben).' : 'Tipp verwendet.', '');
+    setTimeout(function () { group.forEach(function (it) { setFlag(it, 'hint', false); }); }, 2200);
   });
 
   $('endBtn').addEventListener('click', function () {
@@ -702,13 +850,16 @@
     if (G.mode === 'learn') { stopGame(); showStart(); return; }
     finishGame(true);
   });
-  $('menuBtn').addEventListener('click', function () { if (G && G.mode !== 'learn' && !G.ended) { if (!confirm('Aktuelles Spiel abbrechen?')) return; } stopGame(); showStart(); });
+  $('menuBtn').addEventListener('click', function () {
+    if (!DATA) return;
+    if (G && G.mode !== 'learn' && !G.ended) { if (!confirm('Aktuelles Spiel abbrechen?')) return; }
+    stopGame(); showStart();
+  });
 
   function stopGame() {
     if (G && G.timer) clearInterval(G.timer);
     G = null;
-    $('hud').hidden = true;
-    clearMarks();
+    $('hud').hidden = true; $('tip').style.display = 'none';
     resetItems(null);
   }
 
@@ -717,8 +868,7 @@
     G.ended = true;
     clearInterval(G.timer);
     var ms = Date.now() - G.start;
-    clearMarks();
-    // nicht beantwortete Ortsteile bei Abbruch als verpasst markieren
+    clearFlags();
     if (aborted) {
       G.queue.concat(G.current && G.current.state === 'idle' ? [G.current] : []).forEach(function (it) {
         if (G.missed.indexOf(it) === -1) G.missed.push(it);
@@ -744,15 +894,18 @@
   function showModal(html) { $('card').innerHTML = html; $('modal').hidden = false; }
 
   function bezOptions() {
-    var o = '<option value="all">Alle 10 Stadtbezirke (' + items.length + ' Ortsteile)</option>';
-    BEZIRKE.forEach(function (b, i) {
+    var o = '<option value="all">Alle Stadtbezirke (' + items.length + ' Ortsteile)</option>';
+    BEZ.forEach(function (b, i) {
       var n = items.filter(function (it) { return it.bez === i; }).length;
-      o += '<option value="' + i + '">Stadtbezirk ' + b.name + ' (' + n + ')</option>';
+      if (n) o += '<option value="' + i + '">' + (b.name ? 'Stadtbezirk ' + b.name : 'Ortsteile') + ' (' + n + ')</option>';
     });
     return o;
   }
 
   function showStart() {
+    var dl = DATA_SRC !== 'local'
+      ? '<p class="note"><button class="btn sec" id="dlBtn" type="button" style="padding:5px 10px;font-size:.8rem">Kartendaten speichern</button> Optional: Als <code>ortsteile.geojson</code> neben die <code>index.html</code> legen, dann lädt die Seite sofort.</p>'
+      : '';
     showModal(
       '<h2>Leipzig Ortsteile-Quiz</h2>' +
       '<p>Wie gut kennst du die Ortsteile Leipzigs? Du hast pro Ortsteil ' + MAX_TRIES + ' Versuche. Gewertet wird, was auf Anhieb richtig war.</p>' +
@@ -763,13 +916,24 @@
       '</div>' +
       '<label class="field">Gebiet<select id="selBez">' + bezOptions() + '</select></label>' +
       '<button class="btn big" id="goBtn" type="button">Spiel starten</button>' +
-      '<p class="note" style="margin-top:12px">Tipp: Oben rechts kannst du zwischen topografischer und stilisierter Hintergrundkarte wechseln. Beide Karten kommen ohne Ortsnamen aus.</p>' +
-      '<p class="note">Geodaten: Stadt Leipzig, Amt für Statistik und Wahlen (Datenlizenz Deutschland – Namensnennung 2.0).</p>'
+      '<p class="note" style="margin-top:12px">Oben rechts wechselst du die Hintergrundkarte und schaltest die 3D-Ansicht ein (Gebäude erscheinen ab Zoomstufe 13; mit gedrückter rechter Maustaste oder zwei Fingern kannst du die Karte drehen und neigen). Die Karten zeigen keine Ortsnamen.</p>' +
+      dl +
+      '<p class="note">Grenzen: © OpenStreetMap-Mitwirkende (ODbL). Karten: OpenFreeMap, Höhendaten: Mapzen/AWS.</p>'
     );
     $('goBtn').addEventListener('click', function () {
-      var mode = document.querySelector('input[name="mode"]:checked').value;
-      startGame(mode);
+      startGame(document.querySelector('input[name="mode"]:checked').value);
     });
+    var d = $('dlBtn');
+    if (d) d.addEventListener('click', downloadData);
+  }
+
+  function downloadData() {
+    if (!DATA) return;
+    var blob = new Blob([JSON.stringify(DATA)], { type: 'application/geo+json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'ortsteile.geojson';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
   }
 
   function showResults(r) {
@@ -786,9 +950,7 @@
     if (r.best && !r.aborted) {
       html += '<p class="note">' + (r.isNew ? '🏆 Neue Bestleistung!' : 'Bestleistung: ' + r.best.pct + ' % in ' + fmtTime(r.best.ms)) + '</p>';
     }
-    if (G.missed.length) {
-      html += '<b>Zum Wiederholen (' + G.missed.length + '):</b><div class="chips" id="missedChips"></div>';
-    }
+    if (G.missed.length) html += '<b>Zum Wiederholen (' + G.missed.length + '):</b><div class="chips" id="missedChips"></div>';
     html += '<div class="row">' +
       '<button class="btn" id="againBtn" type="button">Nochmal</button>' +
       (G.missed.length ? '<button class="btn sec" id="missedBtn" type="button">Nur Fehler üben</button>' : '') +
@@ -797,75 +959,103 @@
     var chips = $('missedChips');
     if (chips) G.missed.forEach(function (it) { var s = document.createElement('span'); s.textContent = it.name; chips.appendChild(s); });
     var mode = G.mode, bez = G.bez, missedItems = G.missed.slice();
-    $('againBtn').addEventListener('click', function () { var m = mode; var b = bez; stopGame(); startGame(m, { bez: b }); });
+    $('againBtn').addEventListener('click', function () { stopGame(); startGame(mode, { bez: bez }); });
     var mb = $('missedBtn');
-    if (mb) mb.addEventListener('click', function () { var m = mode; stopGame(); startGame(m, { only: missedItems }); });
+    if (mb) mb.addEventListener('click', function () { stopGame(); startGame(mode, { only: missedItems }); });
     $('menuBtn2').addEventListener('click', function () { stopGame(); showStart(); });
   }
 
   /* =====================================================================
-   *  Laden der Daten
+   *  Laden der Grenzdaten:  lokale Datei -> Browser-Cache -> OpenStreetMap
    * ===================================================================== */
   function showLoading(msg) {
     showModal('<h2>Karte wird geladen …</h2><div class="spinner" role="status"></div><p class="note" id="loadMsg">' + (msg || '') + '</p>');
   }
+  function loadMsg(t) { var el = $('loadMsg'); if (el) el.textContent = t; }
 
-  function fetchJson(url) {
-    return fetch(url, { cache: 'force-cache' }).then(function (r) {
+  function fetchT(url, opts, ms) {
+    opts = opts || {};
+    if ('AbortController' in window) {
+      var ctl = new AbortController(); opts.signal = ctl.signal;
+      setTimeout(function () { ctl.abort(); }, ms);
+    }
+    return fetch(url, opts);
+  }
+
+  function tryLocal() {
+    return fetchT(LOCAL_FILE, { cache: 'no-cache' }, 15000).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
+    }).then(function (fc) { return { pre: toPre(fc), src: 'local' }; });
+  }
+  function tryCache() {
+    return new Promise(function (resolve, reject) {
+      var raw = safeGet(CACHE_KEY);
+      if (!raw) return reject(new Error('kein Cache'));
+      try {
+        var pre = JSON.parse(raw);
+        if (pre.lpz !== 2 || !pre.features || pre.features.length < 10) throw new Error('Cache ungültig');
+        resolve({ pre: pre, src: 'cache' });
+      } catch (e) { reject(e); }
     });
   }
-  function validFc(fc) {
-    return fc && fc.type === 'FeatureCollection' && Array.isArray(fc.features) && fc.features.length >= 10;
+  function tryOverpass() {
+    var i = 0;
+    function next() {
+      if (i >= OVERPASS.length) return Promise.reject(new Error('Overpass nicht erreichbar'));
+      var url = OVERPASS[i++];
+      loadMsg('Lade Grenzen aus OpenStreetMap (' + i + '/' + OVERPASS.length + ') …');
+      return fetchT(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(OVERPASS_QUERY)
+      }, 70000).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function (json) {
+        var pre = buildFromOverpass(json);
+        safeSet(CACHE_KEY, JSON.stringify(pre));
+        return { pre: pre, src: 'osm' };
+      }).catch(function (e) { console.warn('Overpass', url, e); return next(); });
+    }
+    return next();
   }
 
   function loadData() {
     showLoading('Lade Ortsteil-Grenzen …');
-    var i = 0;
-    function attempt() {
-      if (i >= SOURCES.length) return Promise.reject(new Error('keine Quelle erreichbar'));
-      var url = SOURCES[i++];
-      return fetchJson(url).then(function (fc) {
-        if (!validFc(fc)) throw new Error('ungültiges GeoJSON');
-        return fc;
-      }).catch(function () { return attempt(); });
-    }
-    attempt().then(onData).catch(showLoadError);
+    tryLocal().catch(tryCache).catch(tryOverpass).then(function (res) {
+      applyData(res.pre, res.src);
+    }).catch(function (e) { console.error(e); showLoadError(); });
   }
 
-  function onData(fc) {
+  function applyData(pre, src) {
     try {
-      fc = ensureWgs84(fc);
-      buildLayers(fc);
+      DATA_SRC = src;
+      buildItems(pre);
+      ensureLayers();
+      refreshStyles();
+      var all = items.reduce(function (b, it) {
+        return [[Math.min(b[0][0], it.bounds[0][0]), Math.min(b[0][1], it.bounds[0][1])],
+                [Math.max(b[1][0], it.bounds[1][0]), Math.max(b[1][1], it.bounds[1][1])]];
+      }, [[Infinity, Infinity], [-Infinity, -Infinity]]);
+      map.fitBounds(all, { padding: 30, duration: 0 });
       showStart();
-    } catch (e) {
-      console.error(e);
-      showLoadError(e);
-    }
+    } catch (e) { console.error(e); showLoadError(); }
   }
 
   function showLoadError() {
     showModal(
       '<h2 class="error">Daten konnten nicht geladen werden</h2>' +
-      '<p>Der Server der Stadt Leipzig erlaubt das Laden von fremden Seiten nicht. Lösung:</p>' +
-      '<ol style="line-height:1.6;color:#334155">' +
-        '<li>Datei herunterladen (Rechtsklick → „Link speichern unter“): <a href="' + REMOTE_URL + '" target="_blank" rel="noopener">Ortsteile_Leipzig_UTM33N.json</a></li>' +
-        '<li>Sie in <code>ortsteile.geojson</code> umbenennen und im GitHub-Repository neben die <code>index.html</code> hochladen (dauerhafte Lösung).</li>' +
-        '<li>Zum schnellen Test: Datei hier auswählen oder hineinziehen.</li>' +
-      '</ol>' +
-      '<div class="dropzone" id="drop"><input type="file" id="fileIn" accept=".json,.geojson,application/json"><p class="note">oder Datei hierher ziehen</p></div>' +
+      '<p>Die Ortsteil-Grenzen konnten weder aus OpenStreetMap noch aus einer lokalen Datei geladen werden. Bitte Internetverbindung prüfen und erneut versuchen.</p>' +
+      '<div class="dropzone" id="drop"><input type="file" id="fileIn" accept=".json,.geojson,application/json"><p class="note">Alternativ eine GeoJSON-Datei auswählen oder hierher ziehen</p></div>' +
       '<button class="btn sec big" id="retryBtn" type="button">Erneut versuchen</button>'
     );
     function handleFile(file) {
       if (!file) return;
       var rd = new FileReader();
       rd.onload = function () {
-        try {
-          var fc = JSON.parse(rd.result);
-          if (!validFc(fc)) throw new Error('kein gültiges GeoJSON');
-          onData(fc);
-        } catch (e) { alert('Die Datei konnte nicht gelesen werden: ' + e.message); }
+        try { applyData(toPre(JSON.parse(rd.result)), 'file'); }
+        catch (e) { alert('Die Datei konnte nicht gelesen werden: ' + e.message); }
       };
       rd.readAsText(file);
     }
@@ -876,10 +1066,6 @@
     $('retryBtn').addEventListener('click', loadData);
   }
 
-  /* =====================================================================
-   *  Start
-   * ===================================================================== */
-  setBase(safeGet('lpz-base') === 'topo' ? 'topo' : 'style');
   loadData();
 })();
 </script>
